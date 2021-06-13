@@ -1,0 +1,206 @@
+---
+title: "Neural Networks"
+author: "Amanda Oliveira"
+output: html_document
+---
+
+
+```{r, message=FALSE, warning=FALSE}
+
+# install.packages("tidyverse")
+# install.packages("QuantPsyc")
+# install.packages("neuralnet")
+
+library(tidyverse)
+library(QuantPsyc)
+library(neuralnet)
+
+```
+
+## **1. Application: Webcam Images & Student Attention** 
+
+In the /data folder you will find the attention1.csv and attention2.csv files; the data describe features associated with webcam images of 100 students' faces as they participate in an online discussion. The variables are:
+
+* eyes - student has their eyes open (1 = yes, 0 = no)
+* face.forward - student is facing the camera (1 = yes, 0 = no)
+* chin.up - student's chin is raised above 45 degrees (1 = yes, 0 = no)
+* squint - eyes are squinting
+* hunch - shoulders are hunched over
+* mouth1 - mouth is smiling
+* mouth2 - mouth is frowning
+* mouth3 - mouth is open
+* attention - whether the student was paying attention when asked (1 = yes, 0 = no)
+
+We will use the webcam data to build a neural net to predict whether or not a student is paying attention to class.
+
+
+#### **1.1. Load the Data**
+
+```{r}
+
+D1 <- read.csv("./data/attention1.csv")
+  
+D2 <- read.csv("./data/attention2.csv")
+
+```
+
+#### **1.2. Neural Net**
+
+Now we can build a neural net that predicts attention based on webcam images. The command "neuralnet" sets up the model. It is composed of four basic arguments:
+
+* A formula that describes the inputs and outputs of the neural net (attention is our output)
+* The data frame that the model will use
+* How many nodes are in the hidden layer
+* A threshold that tells the model when to stop adjusting weights to find a better fit. If error does not change more than the threshold from one iteration to the next, the algorithm will stop (We will use 0.01, so if prediction error does not change by more than 1% from one iteration to the next the algorithm will halt)
+
+```{r}
+
+set.seed(99)
+nn <- neuralnet(attention == 1 ~ eyes + face.forward + chin.up + squint + hunch + mouth1 + mouth2 + mouth3, D1, hidden = c(2,2), learningrate = 0.2)
+
+plot(nn)
+
+#The option "hidden" allows us to change the number of hidden layers and number of nodes within the hidden layers c(1,1) = one hidden layer with 1 node, 0 = zero hidden layers, etc
+
+#The option "learningrate" alters the size of the steps the model takes every time it adjusts the weights.
+
+# The plot shows you the layers of your network as black nodes and edges with the calculated weights on each edge. The blue nodes and edges are the bias/threshold terms - it is a little bit confusing that they are represented as nodes, they are not nodes in the sense that the black nodes are. The bias anchors the activation function, the weights change the shape of the activation function while the bias term changes the overall position of the activation function - if you have used linear regression the bias term is like the intercept of the regression equation, it shifts the trend line up and down the y axis, while the other parameters change the angle of the line. The plot also reports the final error rate and the number of iterations ("steps") that it took to reach these weights.
+
+```
+
+#### **1.3. Neural Net - Change #Layers**
+
+Now we will build a second neural net with more or fewer layers in it and determine if this improves your predictions or not. 
+
+```{r}
+
+# with more layers the Error appears to go down, but only up to a certain point 
+set.seed(99)
+nn_plus <- neuralnet(attention == 1 ~ eyes + face.forward + chin.up + squint + hunch + mouth1 + mouth2 + mouth3, D1, hidden = c(4,3,2,2), learningrate = 0.2)
+
+plot(nn_plus)
+
+# with less layers
+set.seed(99)
+nn_less <- neuralnet(attention == 1 ~ eyes + face.forward + chin.up + squint + hunch + mouth1 + mouth2 + mouth3, D1, hidden = c(2), learningrate = 0.2)
+
+plot(nn_less)
+
+
+```
+
+#### **1.4. Predict Data**
+
+
+```{r}
+# Create a new data frame (D3) that only includes the input layers to use this command. Use second dataset.
+D3 <- D2[,-c(4)]
+
+#Predict the outcome using D3 data
+pred <- predict(nn, D3)
+
+#See model accuracy at predicting the unseen data
+table(D2$attention == 1, pred[, 1] > 0.5)
+
+#Adjust both the hidden layer and learning rate and see if that has an impact on error, steps and prediction accuracy
+pred_plus <- predict(nn_plus, D3)
+table(D2$attention == 1, pred_plus[, 1] > 0.5)
+
+set.seed(99)
+nn_plus2 <- neuralnet(attention == 1 ~ eyes + face.forward + chin.up + squint + hunch + mouth1 + mouth2 + mouth3, D1, hidden = c(4,3,2,2), learningrate = .3)
+pred_plus2 <- predict(nn_plus2, D3)
+table(D2$attention == 1, pred_plus2[, 1] > 0.5)
+
+pred_less <- predict(nn_less, D3)
+table(D2$attention == 1, pred_less[, 1] > 0.5)
+
+
+```
+
+#### **1.5. Discussion**
+
+* Model Accuracy: The "plus" model has an accuracy rate of (100-5)/100 = 95%. The "less" model has an accuracy of 97%
+
+* The model attempts to predict whether students are "paying attention" based on facial expressions. I wonder how the attention dummy was generated - because that's crucial to train the model. Was that self-declared attention? Did the Professor decide who was/wasn't paying attention? 
+
+* Real facial recognition is a lot more complex than in our simple example. But I do believe NN it to be a powerful tool for predicting/categorizing real facial movements. However, there are a number of problems related to it as well. In our simple example, "attention" was modeled as a one-time variable. If it caught a student momentarily blinking for instance, it could categorize an attentive student as inattentive. Perhaps attention flags could be generated in regular time intervals to really provide a more meaningful analysis. 
+
+* Models like these also have the potential to carry biases against certain physiognomies or behavioral types. "Attentive faces" don't all look the same; some people "smile more"; others have small/bigger eyes that look less/more open just because of their anatomy. 
+
+
+## **2. Application: Predict Class Dropouts** 
+
+In this second application I will reuse data from the [Prediction Project](https://github.com/amanda-ago/4-Prediction) to predict if a given student is more or less inclined to drop classes. The variables are:
+
+* student_id = Student ID
+* years = Number of years the student has been enrolled in their program of study
+* entrance_test_score = Entrance exam test score
+* courses_taken = Number of courses a student has taken during their program
+* complete = Whether or not a student completed a course or dropped out (yes = completed)
+* enroll_data_time = Date and time student enrolled in POSIXct format
+* course_id = Course ID
+* international = Is the student from overseas
+* online = Is the student only taking online courses
+* gender = One of five possible gender identities
+
+#### **2.1. Data Wrangling**
+
+```{r}
+
+dropout <- read.csv("./data/additional-example-drop-out.csv")
+
+## Create a student-level dataset. Generate a binary indicator =1 if student dropped any courses at all. 
+# Objective is to identify students' willing to engage in "course-shopping".
+dropout$drop <- ifelse(dropout$complete=="no", 1, 0)
+dropout$international <- ifelse(dropout$international=="no", 0, 1)
+dropout$online <- ifelse(dropout$online=="no", 0, 1)
+
+dropout <- dropout %>% group_by(student_id) %>% summarize(drop=max(drop), international=max(international), online=max(online), gender=max(gender), years=max(years), score=max(entrance_test_score), courses=max(courses_taken))
+
+table(dropout$drop)
+
+## Scale dataset
+maxs <- apply(dropout[2:8], 2, max) 
+mins <- apply(dropout[2:8], 2, min)
+scaled <- cbind(dropout[1], as.data.frame(scale(dropout[2:8], center = mins, scale = maxs - mins)))
+
+```
+
+#### **2.2. Train and Test Data**
+
+
+```{r}
+
+set.seed(9850)
+g <- runif(nrow(scaled))
+scaled <- scaled[order(g),] #randomly ordered
+train <- scaled[1:300,]
+test <- scaled[301:682,]
+
+```
+
+#### **2.3. Build Neural Net**
+
+```{r}
+
+set.seed(99)
+nn_dropout <- neuralnet(drop==1 ~ international + online + gender + years + score + courses , train, hidden = 3, learningrate = 0.1)
+plot(nn_dropout)
+
+```
+
+#### **2.4. Predict on Test Data**
+
+```{r}
+
+pred_drop <- predict(nn_dropout, test[,-c(1,2)])
+table(test$drop == 1, pred_drop[, 1] > 0.5)
+
+nn_dropout$result.matrix
+
+# Accuracy: 94%
+
+```
+
+
+
